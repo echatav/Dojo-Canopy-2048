@@ -53,19 +53,22 @@ module program =
         on your machine.
         *)
 
-
+        start firefox
 
         (*
         Task 2: open the game url.
         *)
 
-
+        url "http://gabrielecirulli.github.io/2048/"
 
         (*
         Task 3: play up, left, down, right.
         *)
-
-
+        let task3 () =
+            press up
+            press left
+            press down
+            press right
 
         (*
         Task 4: retrieve the score.
@@ -73,7 +76,7 @@ module program =
         appropriate css tag.
         *)
 
-
+        let task4 () = read ".score-container" |> Console.WriteLine
 
         (*
         Task 5: play a random game.
@@ -83,7 +86,22 @@ module program =
         a good way to go!
         *)
 
+        let randomMove () =
+            (new System.Random()).Next 4
+            |> function | 0 -> Up
+                        | 1 -> Left
+                        | 2 -> Down
+                        | _ -> Right
 
+        let doMove =
+            function | Up -> press up
+                     | Left -> press left
+                     | Down -> press down
+                     | Right -> press right
+
+        let task6 () =
+            while true do
+                randomMove () |> doMove
 
         (*
         Task 6: terminate!
@@ -95,7 +113,11 @@ module program =
         situations, lost () and won ().
         *)
 
-
+        let task6 () =
+            let mutable play = true
+            while play do
+                randomMove () |> doMove
+                if (lost () || won ()) then play <- false
 
         (*
         Task 7: gimme some brains!
@@ -118,7 +140,25 @@ module program =
         * the State after the move.
         *)
 
+        let moves = [Up; Left; Right; Down]
+        
+        let bestMove () =
+            let st = state ()
+            moves
+            (* calculate the resulting scores and states of each move *)
+            |> List.map (fun move -> (move,execute st move))
+            (* filter out those moves that get stuck *)
+            |> List.filter (fun (move,(score,st')) -> st <> st')
+            (* maximize by the score *)
+            |> List.maxBy (fun (move,(score,st')) -> score)
+            (* get the resulting move *)
+            |> fun (move,(score,st')) -> move
 
+        let task7 () =
+            let mutable play = true
+            while play do
+                bestMove () |> doMove
+                if (lost () || won ()) then play <- false
 
         (*
         Task 8: go for it!
@@ -126,8 +166,71 @@ module program =
         to experiment and see if you can make that bot
         smarter!
         *)
+      
+        (* Construct depth 2 & 3 forests of moves. *)
+        let moves2 = List.zip moves (List.replicate 4 moves)
+        let moves3 = List.zip moves (List.replicate 4 moves2)
 
+        (*
+        Using move2, look ahead a move to figure out which move
+        for this round will give a score maximizing opportunity up
+        to one round ahead.
+        *)
+        let bestMove2 () =
+            let st = state ()
+            moves2
+            |> List.map (fun (move,nexts) -> ((move,nexts),execute st move))
+            |> List.filter (fun ((move,nexts),(score,st')) -> st <> st')
+            |> List.maxBy (fun ((move,nexts),(score,st')) ->
+                nexts
+                |> List.map (fun move -> (move,execute st' move))
+                |> List.filter (fun (move,(score,st'')) -> st' <> st'')
+                |> List.maxBy (fun (move,(score',st'')) -> max score score')
+                |> fun (move,(score',st'')) -> max score score')
+            |> fun ((move,nexts),(score,st')) -> move
 
+        (*
+        Using move3, look ahead two move to figure out which move
+        for this round will give a score maximizing opportunity up
+        to two round ahead.
+        *)
+        let bestMove3 () =
+            let st = state ()
+            moves3
+            |> List.map (fun (move,move2s) -> ((move,move2s),execute st move))
+            |> List.filter (fun ((move,move2s),(score,st')) -> st <> st')
+            |> List.maxBy (fun ((move,move2s),(score,st')) ->
+                move2s
+                |> List.map (fun (move,move1s) -> ((move,move1s),execute st' move))
+                |> List.filter (fun ((move,move1s),(score',st'')) -> st' <> st'')
+                |> List.maxBy (fun ((move,move1s),(score',st'')) ->
+                    move1s
+                    |> List.map (fun move -> (move,execute st'' move))
+                    |> List.filter (fun (move,(score'',st''')) -> st'' <> st''')
+                    |> List.maxBy (fun (move,(score'',st''')) -> score + score' + score'')
+                    |> fun (move,(score'',st''')) -> score + score' + score''))
+            |> fun ((move,move2s),(score,st')) -> move
+
+        (*
+        This strategy will generalize to allow lookahead of any
+        number of rounds. Construct a forest of moves of depth n. Then
+        calculate the best move recursively. However, the further out
+        the worse the calculation because it naively ignores new blocks.
+        In fact bestMove3 does worse than bestMove2. Instead, we should
+        calculate expected scores over the possible distribution of a new
+        block on each round. Also, absolute scores don't matter; we should
+        maximize on each round by the weighted deviation from the average
+        expected score (x-m)/m. Then maximize over the rounds, weighing
+        sooner rounds higher than later rounds, to make the bot risk averse.
+        *)
+
+        let task8 () =
+            let mutable play = true
+            while play do
+                bestMove2 () |> doMove
+                if (lost () || won ()) then play <- false
+
+        task8 ()
 
         // Just to make sure the test function
         // ends properly.
